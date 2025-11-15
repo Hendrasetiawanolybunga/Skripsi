@@ -27,7 +27,7 @@
                             {% for trans in pesanan %}
                             <tr>
                                 <td class="fs-6 fs-sm-7">{{ trans.id }}</td>
-                                <td class="fs-6 fs-sm-7">{{ trans.pelanggan.nama_pelanggan }}</td>
+                                <td class="fs-6 fs-sm-7">{{ trans.idPelanggan.nama_pelanggan }}</td>
                                 <td class="fs-6 fs-sm-7">{{ trans.tanggal|date:"d M Y H:i" }}</td>
                                 <td class="fs-6 fs-sm-7">Rp {{ trans.total|intcomma }}</td>
                                 <td class="fs-6 fs-sm-7">Rp {{ trans.ongkir|intcomma }}</td>

@@ -3,7 +3,7 @@ from .models import Transaksi, Produk
 
 class TransaksiTable(tables.Table):
     id = tables.Column(verbose_name="ID")
-    pelanggan = tables.Column(verbose_name="Pelanggan")
+    idPelanggan = tables.Column(verbose_name="Pelanggan")
     tanggal = tables.Column(verbose_name="Tanggal Transaksi")
     status_transaksi = tables.Column(verbose_name="Status")
     total = tables.Column(verbose_name="Total Harga")
@@ -11,7 +11,7 @@ class TransaksiTable(tables.Table):
     class Meta:
         model = Transaksi
         template_name = "django_tables2/bootstrap.html"
-        fields = ("id", "pelanggan", "tanggal", "status_transaksi", "total")
+        fields = ("id", "idPelanggan", "tanggal", "status_transaksi", "total")
         attrs = {"class": "table table-striped table-bordered"}
 
 class ProdukTerlarisTable(tables.Table):

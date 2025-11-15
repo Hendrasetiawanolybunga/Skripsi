@@ -127,7 +127,7 @@ class PelangganAdmin(BaseModelAdmin):
             
             # Calculate total spending for paid transactions
             total_spending = Transaksi.objects.filter(
-                pelanggan=pelanggan,
+                idPelanggan=pelanggan,
                 status_transaksi__in=['DIBAYAR', 'DIKIRIM', 'SELESAI']
             ).aggregate(
                 total_belanja=Sum('total')
@@ -158,7 +158,7 @@ class PelangganAdmin(BaseModelAdmin):
             # Create/update discount for each top product
             for product in top_products:
                 diskon, created = DiskonPelanggan.objects.get_or_create(
-                    pelanggan=pelanggan,
+                    idPelanggan=pelanggan,
                     produk=product,
                     defaults={
                         'persen_diskon': 10,
@@ -265,8 +265,8 @@ class PelangganAdmin(BaseModelAdmin):
         if is_loyal and is_ultah:
             # Create or update discount for the customer
             diskon, created = DiskonPelanggan.objects.get_or_create(
-                pelanggan=pelanggan,
-                produk=None,  # General discount (not product-specific)
+                idPelanggan=pelanggan,
+                idProduk=None,  # General discount (not product-specific)
                 defaults={
                     'persen_diskon': 10,  # 10% discount
                     'status': 'aktif',
@@ -435,9 +435,9 @@ class ProdukAdmin(BaseModelAdmin):
         
         # Get best selling products based on quantity sold
         best_selling = DetailTransaksi.objects.filter(
-            transaksi__status_transaksi='DIBAYAR'
+            idTransaksi__status_transaksi='DIBAYAR'
         ).values(
-            'produk__nama_produk'
+            'idProduk__nama_produk'
         ).annotate(
             total_quantity=Sum('jumlah_produk')
         ).order_by('-total_quantity')[:10]  # Top 10 best selling products
@@ -445,7 +445,7 @@ class ProdukAdmin(BaseModelAdmin):
         if best_selling:
             message = "10 Produk Terlaris:\n"
             for i, item in enumerate(best_selling, 1):
-                message += f"{i}. {item['produk__nama_produk']}: {item['total_quantity']} unit terjual\n"
+                message += f"{i}. {item['idProduk__nama_produk']}: {item['total_quantity']} unit terjual\n"
             self.message_user(request, message)
         else:
             self.message_user(request, "Tidak ada data penjualan untuk produk terpilih.")
@@ -557,9 +557,11 @@ class TransaksiAdmin(BaseModelAdmin):
         for transaksi in queryset:
             detail_url = reverse('detail_pesanan', args=[transaksi.pk])
             create_notification(
-                transaksi.pelanggan,
+                transaksi.idPelanggan,
                 "Pesanan Selesai",
-                f"Pesanan Anda dengan ID {transaksi.id} telah SELESAI. <a href='{detail_url}' class='alert-link'>Beri Feedback</a>"
+                f"Pesanan Anda dengan ID {transaksi.id} telah SELESAI. "
+                f"Kami harap Anda puas dengan layanan kami. "
+                f"<a href='{detail_url}' class='alert-link'>Beri Feedback</a>"
             )
         self.message_user(request, f"{updated_count} transaksi berhasil diubah statusnya menjadi Selesai.")
     
@@ -584,7 +586,7 @@ class TransaksiAdmin(BaseModelAdmin):
             from .views import create_notification
             # Create notification for the customer
             create_notification(
-                obj.pelanggan,
+                obj.idPelanggan,
                 "Ongkos Kirim Diperbarui",
                 f"Ongkos kirim untuk pesanan Anda dengan ID #{obj.id} telah diperbarui. "
                 f"Jumlah Ongkir yang harus Anda bayarkan saat produk diantar adalah  Rp {obj.ongkir:,.0f}. "
@@ -616,7 +618,7 @@ class TransaksiAdmin(BaseModelAdmin):
         if new_status in ['DIPROSES', 'DIKIRIM', 'DIBAYAR'] and old_status not in ['DIPROSES', 'DIKIRIM', 'DIBAYAR']:
             with db_transaction.atomic():
                 for detail in obj.detailtransaksi_set.all():
-                    produk = detail.produk
+                    produk = detail.idProduk
                     
                     if produk.stok_produk < detail.jumlah_produk:
                         messages.error(request, f"Stok produk '{produk.nama_produk}' tidak mencukupi.")
@@ -630,7 +632,7 @@ class TransaksiAdmin(BaseModelAdmin):
             # Gunakan detail transaksi dari objek LAMA (old_obj)
             with db_transaction.atomic():
                 for detail in old_obj.detailtransaksi_set.all():
-                    produk = detail.produk
+                    produk = detail.idProduk
                     produk.stok_produk = F('stok_produk') + detail.jumlah_produk
                     produk.save(update_fields=['stok_produk'])
                     messages.success(request, f"Stok produk '{produk.nama_produk}' dikembalikan.")

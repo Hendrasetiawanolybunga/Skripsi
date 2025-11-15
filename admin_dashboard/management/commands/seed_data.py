@@ -300,7 +300,7 @@ class Command(BaseCommand):
         for transaksi_info in transaksi_data:
             # Create transaction without manual ID
             transaksi_obj = Transaksi.objects.create(
-                pelanggan=transaksi_info['pelanggan'],
+                idPelanggan=transaksi_info['pelanggan'],
                 status_transaksi=transaksi_info['status_transaksi'],
                 waktu_checkout=transaksi_info['waktu_checkout'],
                 batas_waktu_bayar=transaksi_info['waktu_checkout'] + timedelta(hours=24),
@@ -312,8 +312,8 @@ class Command(BaseCommand):
             # Create detail transaksi
             for detail in transaksi_info['produk_details']:
                 DetailTransaksi.objects.create(
-                    transaksi=transaksi_obj,
-                    produk=detail['produk'],
+                    idTransaksi=transaksi_obj,
+                    idProduk=detail['produk'],
                     jumlah_produk=detail['jumlah_produk'],
                     sub_total=detail['sub_total']
                 )

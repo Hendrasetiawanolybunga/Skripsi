@@ -28,7 +28,7 @@ class Command(BaseCommand):
             
             # Calculate total spending for paid transactions
             total_spending = Transaksi.objects.filter(
-                pelanggan=customer,
+                idPelanggan=customer,
                 status_transaksi__in=['DIBAYAR', 'DIKIRIM', 'SELESAI']
             ).aggregate(
                 total_belanja=Sum('total')
@@ -40,13 +40,13 @@ class Command(BaseCommand):
             # Check if notification already exists today for this customer (duplicate prevention)
             # We need to allow both P2-A and P2-B notifications, so check for specific message content
             existing_p2a_notification = Notifikasi.objects.filter(
-                pelanggan=customer,
+                idPelanggan=customer,
                 tipe_pesan="Diskon Ulang Tahun Permanen",
                 created_at__date=today
             ).first() if is_loyal else None
             
             existing_p2b_notification = Notifikasi.objects.filter(
-                pelanggan=customer,
+                idPelanggan=customer,
                 tipe_pesan="Diskon Ulang Tahun Instan",
                 created_at__date=today
             ).first() if not is_loyal else None

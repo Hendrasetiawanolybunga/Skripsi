@@ -185,5 +185,5 @@ class Notifikasi(models.Model):
         db_table = 'notifikasi'
     
     def __str__(self):
-        pelanggan_nama = getattr(self.pelanggan, 'nama_pelanggan', 'Pelanggan')
+        pelanggan_nama = getattr(self.idPelanggan, 'nama_pelanggan', 'Pelanggan')
         return f"Notifikasi untuk {pelanggan_nama}"

@@ -33,13 +33,13 @@ class ProdukTerlarisFilter(django_filters.FilterSet):
         widget=forms.TextInput(attrs={'class': 'form-control'})
     )
     tanggal_transaksi__gte = django_filters.DateFilter(
-        field_name='detailtransaksi__transaksi__tanggal',
+        field_name='detailtransaksi__idTransaksi__tanggal',
         lookup_expr='gte',
         label='Tanggal Mulai',
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
     )
     tanggal_transaksi__lte = django_filters.DateFilter(
-        field_name='detailtransaksi__transaksi__tanggal',
+        field_name='detailtransaksi__idTransaksi__tanggal',
         lookup_expr='lte',
         label='Tanggal Akhir',
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})

@@ -142,7 +142,7 @@ def produk_list(request):
     
     # Filter products by category if specified
     if kategori_id:
-        produk = Produk.objects.filter(kategori_id=kategori_id)
+        produk = Produk.objects.filter(kategori__id=kategori_id)
     else:
         produk = Produk.objects.all()
         
@@ -168,7 +168,7 @@ def produk_list(request):
         # Kondisi B: Total semua Transaksi dengan status DIBAYAR/DIKIRIM/SELESAI pelanggan tersebut ≥ Rp 5.000.000
         from django.db.models import Sum
         total_spending = Transaksi.objects.filter(
-            pelanggan=pelanggan,
+            idPelanggan=pelanggan,
             status_transaksi__in=['DIBAYAR', 'DIKIRIM', 'SELESAI']
         ).aggregate(
             total_belanja=Sum('total')
@@ -214,16 +214,16 @@ def produk_list(request):
         diskon_produk = None
         if pelanggan:
             diskon_produk = DiskonPelanggan.objects.filter(
-                pelanggan_id=pelanggan_id,
-                produk=p,
+                idPelanggan_id=pelanggan_id,
+                idProduk=p,
                 status='aktif'
             ).first()
             
             # If no product-specific discount, check for general discount
             if not diskon_produk:
                 diskon_produk = DiskonPelanggan.objects.filter(
-                    pelanggan_id=pelanggan_id,
-                    produk__isnull=True,  # General discount (not product-specific)
+                    idPelanggan_id=pelanggan_id,
+                    idProduk__isnull=True,  # General discount (not product-specific)
                     status='aktif'
                 ).first()
         
@@ -259,7 +259,7 @@ def produk_list_public(request):
     
     # Filter products by category if specified
     if kategori_id:
-        produk = Produk.objects.filter(kategori_id=kategori_id)
+        produk = Produk.objects.filter(kategori__id=kategori_id)
     else:
         produk = Produk.objects.all()
     
@@ -267,14 +267,14 @@ def produk_list_public(request):
     for p in produk:
         # Check for any active discount (no customer-specific filtering for public view)
         diskon_produk = DiskonPelanggan.objects.filter(
-            produk=p,
+            idProduk=p,
             status='aktif'
         ).first()
         
         # If no product-specific discount, check for general discount
         if not diskon_produk:
             diskon_produk = DiskonPelanggan.objects.filter(
-                produk__isnull=True,  # General discount
+                idProduk__isnull=True,  # General discount
                 status='aktif'
             ).first()
         
@@ -331,7 +331,7 @@ def keranjang(request):
     # Kondisi B: Total semua Transaksi dengan status DIBAYAR/DIKIRIM/SELESAI pelanggan tersebut ≥ Rp 5.000.000
     from django.db.models import Sum
     total_spending = Transaksi.objects.filter(
-        pelanggan=pelanggan,
+        idPelanggan=pelanggan,
         status_transaksi__in=['DIBAYAR', 'DIKIRIM', 'SELESAI']
     ).aggregate(
         total_belanja=Sum('total')
@@ -371,16 +371,16 @@ def keranjang(request):
         
         # Check for product-specific discount first
         diskon_produk = DiskonPelanggan.objects.filter(
-            pelanggan_id=pelanggan_id,
-            produk=produk,
+            idPelanggan_id=pelanggan_id,
+            idProduk=produk,
             status='aktif'
         ).first()
         
         # If no product-specific discount, check for general discount
         if not diskon_produk:
             diskon_produk = DiskonPelanggan.objects.filter(
-                pelanggan_id=pelanggan_id,
-                produk__isnull=True,  # General discount
+                idPelanggan_id=pelanggan_id,
+                idProduk__isnull=True,  # General discount
                 status='aktif'
             ).first()
         
@@ -439,6 +439,23 @@ def tambah_ke_keranjang(request, produk_id):
     keranjang_belanja = request.session.get('keranjang', {})
     produk_id_str = str(produk.pk)
     
+    # Validate stock availability before adding to cart
+    current_jumlah_in_cart = keranjang_belanja.get(produk_id_str, 0)
+    total_requested = current_jumlah_in_cart + jumlah
+    
+    if total_requested > produk.stok_produk:
+        # If requested quantity exceeds stock, adjust to available stock
+        available_stock = produk.stok_produk - current_jumlah_in_cart
+        if available_stock <= 0:
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'message': f'Stok produk {produk.nama_produk} tidak mencukupi.'})
+            messages.error(request, f'Stok produk {produk.nama_produk} tidak mencukupi.')
+            return redirect('produk_list')
+        else:
+            # Adjust quantity to available stock
+            jumlah = available_stock
+            messages.warning(request, f'Stok produk {produk.nama_produk} tidak mencukupi. Jumlah yang bisa ditambahkan: {jumlah}.')
+    
     if produk_id_str in keranjang_belanja:
         keranjang_belanja[produk_id_str] += jumlah
     else:
@@ -466,7 +483,7 @@ def tambah_ke_keranjang(request, produk_id):
         if is_birthday:
             # Check if customer has already received a birthday notification today
             existing_notification = Notifikasi.objects.filter(
-                pelanggan=pelanggan,
+                idPelanggan=pelanggan,
                 tipe_pesan__in=["Selamat Ulang Tahun!", "Diskon Ulang Tahun Permanen", "Diskon Ulang Tahun Instan"],
                 created_at__date=today
             ).first()
@@ -476,7 +493,7 @@ def tambah_ke_keranjang(request, produk_id):
                 # Calculate total spending for paid transactions
                 from django.db.models import Sum
                 total_spending = Transaksi.objects.filter(
-                    pelanggan=pelanggan,
+                    idPelanggan=pelanggan,
                     status_transaksi__in=['DIBAYAR', 'DIKIRIM', 'SELESAI']
                 ).aggregate(
                     total_belanja=Sum('total')
@@ -542,14 +559,17 @@ def update_keranjang(request, produk_id):
                 # Check if we can increase (stock availability)
                 if current_jumlah < produk.stok_produk:
                     keranjang_belanja[produk_id_str] = current_jumlah + 1
+                    messages.success(request, f'Jumlah {produk.nama_produk} berhasil diperbarui.')
                 else:
-                    messages.error(request, f'Stok produk {produk.nama_produk} tidak mencukupi.')
+                    messages.warning(request, f'Stok produk {produk.nama_produk} tidak mencukupi. Jumlah maksimal: {produk.stok_produk}.')
             elif action == 'decrease':
                 if current_jumlah > 1:
                     keranjang_belanja[produk_id_str] = current_jumlah - 1
+                    messages.success(request, f'Jumlah {produk.nama_produk} berhasil diperbarui.')
                 else:
                     # Remove item if quantity would be zero
                     del keranjang_belanja[produk_id_str]
+                    messages.success(request, f'{produk.nama_produk} berhasil dihapus dari keranjang.')
             
             request.session['keranjang'] = keranjang_belanja
         
@@ -586,8 +606,17 @@ def checkout_langsung(request, produk_id):
             return redirect('produk_list')
         
         if produk.stok_produk < jumlah:
-            messages.error(request, f'Stok produk {produk.nama_produk} tidak mencukupi. Hanya tersisa {produk.stok_produk}.')
-            return redirect('produk_list')
+            # Adjust quantity to available stock
+            old_jumlah = jumlah
+            jumlah = produk.stok_produk
+            if jumlah == 0:
+                messages.error(request, f'Produk {produk.nama_produk} tidak tersedia saat ini (stok habis).')
+                return redirect('produk_list')
+            else:
+                messages.warning(request, f'Stok produk {produk.nama_produk} tidak mencukupi. Jumlah yang bisa dibeli: {jumlah} (dari {old_jumlah}).')
+                # Update the quantity in the POST data for consistency
+                request.POST = request.POST.copy()
+                request.POST['jumlah'] = str(jumlah)
         
         # Create a temporary cart with just this product
         keranjang_belanja = {str(produk_id): jumlah}
@@ -617,7 +646,10 @@ def proses_pembayaran(request):
                 keranjang_belanja = request.session.get('keranjang', {})
             
             if not keranjang_belanja:
-                messages.error(request, 'Data checkout tidak ditemukan. Silakan coba lagi.')
+                # Only show this message if it's not a GET request or if there's a real issue
+                # For GET requests, we should not show error messages
+                if request.method == 'POST':
+                    messages.error(request, 'Data checkout tidak ditemukan. Silakan coba lagi.')
                 return redirect('keranjang')
             
             pelanggan_id = request.session.get('pelanggan_id')
@@ -632,7 +664,7 @@ def proses_pembayaran(request):
                         alamat_pengiriman = pelanggan.alamat
                     
                     transaksi = Transaksi.objects.create(
-                        pelanggan=pelanggan,
+                        idPelanggan=pelanggan,
                         tanggal=timezone.now(),
                         total=0,
                         bukti_bayar=request.FILES.get('bukti_bayar'),
@@ -669,7 +701,7 @@ def proses_pembayaran(request):
                     # Kondisi B: Total semua Transaksi dengan status DIBAYAR/DIKIRIM/SELESAI pelanggan tersebut ≥ Rp 5.000.000
                     from django.db.models import Sum
                     total_spending = Transaksi.objects.filter(
-                        pelanggan=pelanggan,
+                        idPelanggan=pelanggan,
                         status_transaksi__in=['DIBAYAR', 'DIKIRIM', 'SELESAI']
                     ).aggregate(
                         total_belanja=Sum('total')
@@ -697,10 +729,50 @@ def proses_pembayaran(request):
                     # Customer qualifies for P2-A: Loyalitas Permanen (Loyal + Birthday)
                     qualifies_for_p2a = is_birthday and is_loyal
                     
+                    # Validate stock for all items in cart before processing payment
+                    adjusted_items = []
+                    items_to_remove = []
+                    
                     for produk_id_str, jumlah in keranjang_belanja.items():
                         produk_id = int(produk_id_str)
                         produk = get_object_or_404(Produk, pk=produk_id)
                         
+                        if produk.stok_produk < jumlah:
+                            # Adjust quantity to available stock
+                            old_jumlah = jumlah
+                            jumlah = produk.stok_produk
+                            keranjang_belanja[produk_id_str] = jumlah
+                            messages.warning(request, f'Stok produk {produk.nama_produk} tidak mencukupi. Jumlah yang bisa dibeli: {jumlah} (dari {old_jumlah}).')
+                            
+                            # If stock is 0, mark item for removal
+                            if jumlah == 0:
+                                items_to_remove.append(produk_id_str)
+                                messages.warning(request, f'Produk {produk.nama_produk} telah dihapus dari keranjang karena stok habis.')
+                                continue
+                        
+                        adjusted_items.append((produk_id_str, jumlah))
+                    
+                    # Remove items with zero stock
+                    for item_id in items_to_remove:
+                        if item_id in keranjang_belanja:
+                            del keranjang_belanja[item_id]
+                    
+                    # Check if cart is empty after stock validation
+                    if not keranjang_belanja:
+                        messages.error(request, 'Keranjang belanja Anda kosong setelah penyesuaian stok. Silakan tambahkan produk lain.')
+                        return redirect('keranjang')
+                    
+                    # Update session with adjusted cart
+                    request.session['keranjang'] = keranjang_belanja
+                    if 'checkout_data' in request.session:
+                        request.session['checkout_data']['keranjang_belanja'] = keranjang_belanja
+                    
+                    # Process items with validated stock
+                    for produk_id_str, jumlah in adjusted_items:
+                        produk_id = int(produk_id_str)
+                        produk = get_object_or_404(Produk, pk=produk_id)
+                        
+                        # Final check after adjustments
                         if produk.stok_produk < jumlah:
                             raise ValueError(f'Stok produk {produk.nama_produk} tidak mencukupi. Hanya tersisa {produk.stok_produk}.')
                         
@@ -709,16 +781,16 @@ def proses_pembayaran(request):
                         
                         # Check for product-specific discount first (Priority 1)
                         diskon_produk = DiskonPelanggan.objects.filter(
-                            pelanggan_id=pelanggan_id,
-                            produk=produk,
+                            idPelanggan_id=pelanggan_id,
+                            idProduk=produk,
                             status='aktif'
                         ).first()
                         
                         # If no product-specific discount, check for general discount
                         if not diskon_produk:
                             diskon_produk = DiskonPelanggan.objects.filter(
-                                pelanggan_id=pelanggan_id,
-                                produk__isnull=True,  # General discount
+                                idPelanggan_id=pelanggan_id,
+                                idProduk__isnull=True,  # General discount
                                 status='aktif'
                             ).first()
                         
@@ -754,8 +826,8 @@ def proses_pembayaran(request):
                         jumlah_decimal = Decimal(str(jumlah))
                         sub_total = harga_satuan_decimal * jumlah_decimal
                         detail = DetailTransaksi.objects.create(
-                            transaksi=transaksi,
-                            produk=produk,
+                            idTransaksi=transaksi,
+                            idProduk=produk,
                             jumlah_produk=jumlah,
                             sub_total=sub_total
                         )
@@ -787,7 +859,13 @@ def proses_pembayaran(request):
                 return redirect('keranjang')
         else:
             # Form is not valid, show errors
-            messages.error(request, 'Terjadi kesalahan dalam pengisian form pembayaran.')
+            # Only show this message if there are actual form errors
+            if form.errors:
+                messages.error(request, 'Terjadi kesalahan dalam pengisian form pembayaran. Silakan periksa kembali data yang Anda masukkan.')
+            else:
+                # If form is not valid but has no errors, it might be a GET request
+                # Don't show error message in this case
+                pass
     # For both GET requests and invalid form submissions, show the payment form
     # GET request - show payment form
     form = PembayaranForm()
@@ -801,7 +879,10 @@ def proses_pembayaran(request):
         keranjang_belanja = request.session.get('keranjang', {})
     
     if not keranjang_belanja:
-        messages.error(request, 'Data keranjang tidak ditemukan. Silakan tambahkan produk ke keranjang terlebih dahulu.')
+        # Only show this message if it's not a GET request or if there's a real issue
+        # For GET requests, we should not show error messages
+        if request.method == 'POST':
+            messages.error(request, 'Data keranjang tidak ditemukan. Silakan tambahkan produk ke keranjang terlebih dahulu.')
         return redirect('keranjang')
     
     total_belanja = 0
@@ -814,7 +895,7 @@ def proses_pembayaran(request):
     
     # Create a temporary transaction to set payment deadline
     transaksi = Transaksi(
-        pelanggan=pelanggan,
+        idPelanggan=pelanggan,
         total=0,
         status_transaksi='DIPROSES'
     )
@@ -841,16 +922,16 @@ def proses_pembayaran(request):
         
         # Check for product-specific discount first
         diskon_produk = DiskonPelanggan.objects.filter(
-            pelanggan_id=pelanggan_id,
-            produk=produk,
+            idPelanggan_id=pelanggan_id,
+            idProduk=produk,
             status='aktif'
         ).first()
         
         # If no product-specific discount, check for general discount
         if not diskon_produk:
             diskon_produk = DiskonPelanggan.objects.filter(
-                pelanggan_id=pelanggan_id,
-                produk__isnull=True,  # General discount
+                idPelanggan_id=pelanggan_id,
+                idProduk__isnull=True,  # General discount
                 status='aktif'
             ).first()
         
@@ -892,7 +973,7 @@ def proses_pembayaran(request):
 @login_required_pelanggan
 def daftar_pesanan(request):
     pelanggan = get_object_or_404(Pelanggan, pk=request.session['pelanggan_id'])
-    pesanan = Transaksi.objects.filter(pelanggan=pelanggan).order_by('-tanggal')
+    pesanan = Transaksi.objects.filter(idPelanggan=pelanggan).order_by('-tanggal')
     
     # Get notification count
     notifikasi_count = get_notification_count(pelanggan.id)
@@ -906,8 +987,8 @@ def daftar_pesanan(request):
 @login_required_pelanggan
 def detail_pesanan(request, pesanan_id):
     pelanggan = get_object_or_404(Pelanggan, pk=request.session['pelanggan_id'])
-    transaksi = get_object_or_404(Transaksi, pk=pesanan_id, pelanggan=pelanggan)
-    detail_transaksi = DetailTransaksi.objects.filter(transaksi=transaksi)
+    transaksi = get_object_or_404(Transaksi, pk=pesanan_id, idPelanggan=pelanggan)
+    detail_transaksi = DetailTransaksi.objects.filter(idTransaksi=transaksi)
     
     # Calculate total including shipping cost
     total_dengan_ongkir = Decimal(str(transaksi.total)) + Decimal(str(transaksi.ongkir))
@@ -945,10 +1026,10 @@ def detail_pesanan(request, pesanan_id):
 @login_required_pelanggan
 def notifikasi(request):
     pelanggan = get_object_or_404(Pelanggan, pk=request.session['pelanggan_id'])
-    notifikasi_list = Notifikasi.objects.filter(pelanggan=pelanggan).order_by('-created_at')
+    notifikasi_list = Notifikasi.objects.filter(idPelanggan=pelanggan).order_by('-created_at')
     
     # Logika untuk menandai notifikasi sebagai sudah dibaca
-    Notifikasi.objects.filter(pelanggan=pelanggan, is_read=False).update(is_read=True)
+    Notifikasi.objects.filter(idPelanggan=pelanggan, is_read=False).update(is_read=True)
     
     # Get notification count (will be 0 after marking as read)
     notifikasi_count = 0
@@ -1002,7 +1083,7 @@ def create_notification(pelanggan, tipe_pesan, isi_pesan, url_target='#'):
             isi_pesan = f"{isi_pesan} <a href='{url_target}' class='alert-link'>Lihat detail</a>"
         
         Notifikasi.objects.create(
-            pelanggan=pelanggan,
+            idPelanggan=pelanggan,
             tipe_pesan=tipe_pesan,
             isi_pesan=isi_pesan
         )
@@ -1025,7 +1106,7 @@ def create_notification_for_all_customers(tipe_pesan, isi_pesan, url_target='#')
                 pesan = f"{isi_pesan} <a href='{url_target}' class='alert-link'>Lihat detail</a>"
             
             Notifikasi.objects.create(
-                pelanggan=pelanggan,
+                idPelanggan=pelanggan,
                 tipe_pesan=tipe_pesan,
                 isi_pesan=pesan
             )
@@ -1041,7 +1122,7 @@ def get_notification_count(pelanggan_id):
     """
     try:
         return Notifikasi.objects.filter(
-            pelanggan_id=pelanggan_id,
+            idPelanggan_id=pelanggan_id,
             is_read=False
         ).count()
     except Exception:
@@ -1079,7 +1160,7 @@ def check_expired_payments():
         
         # Create notification for the customer
         create_notification(
-            transaction.pelanggan,
+            transaction.idPelanggan,
             "Pesanan Dibatalkan",
             f"Pesanan #{transaction.id} telah dibatalkan karena melewati batas waktu pembayaran."
         )
